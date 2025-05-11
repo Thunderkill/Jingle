@@ -63,6 +63,10 @@ function RunescapeMap({
 }: RunescapeMapProps) {
   const map = useMap();
   const [selectedSong, setSelectedSong] = useState<string | null>(null);
+  const [cursorPosition, setCursorPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Create a set of allowed song names based on enabled regions
   const allowedSongNames = useMemo(() => {
@@ -86,12 +90,12 @@ function RunescapeMap({
 
   // pan to center of correct polygon
   useEffect(() => {
-    if (gameState.status === GameStatus.AnswerRevealed) {
+    if (gameState.status === GameStatus.AnswerRevealed && gameState.leaflet_ll_click) {
       const song = gameState.songs[gameState.round];
       const { polygon } = findNearestPolygonWhereSongPlays(
         map,
         song,
-        gameState.leaflet_ll_click!
+        gameState.leaflet_ll_click as L.LatLng
       );
 
       const leaflet_ll_correctPolygon = polygon.geometry.coordinates[0];
@@ -122,31 +126,33 @@ function RunescapeMap({
     const { polygon } = findNearestPolygonWhereSongPlays(
       map,
       song,
-      leaflet_ll_click!
+      leaflet_ll_click as L.LatLng
     );
     return polygon;
   }, [map, song, leaflet_ll_click]);
 
   const handleEachFeature = (feature: Feature, layer: L.Layer) => {
-    console.log(feature);
     if (feature.properties && feature.properties.title) {
-      layer.bindPopup(feature.properties.title);
+      const titleMatch = feature.properties.title.match(/>(.*?)</);
+      if (titleMatch && titleMatch[1]) {
+        const songName = decodeHTML(titleMatch[1]).trim();
 
-      // Add click listener to the layer
-      layer.on('click', () => {
-        // Extract song name from feature.properties.title
-        if (feature.properties && feature.properties.title) {
-          const titleMatch = feature.properties.title.match(/>(.*?)</);
-          if (titleMatch && titleMatch[1]) {
-            const songName = decodeHTML(titleMatch[1]);
-            if (songName !== null) {
-              console.log(songName);
-              setSelectedSong(songName.trim()); // Set the selected song
-              onFeatureClick?.(songName.trim()); // Call the new prop function
-            }
+        layer.on('mouseover', (e) => {
+          setSelectedSong(songName);
+          setCursorPosition({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
+        });
+
+        layer.on('mouseout', () => {
+          setSelectedSong(null);
+          setCursorPosition(null);
+        });
+
+        layer.on('click', () => {
+          if (songName !== null) {
+            onFeatureClick?.(songName); // Call the new prop function
           }
-        }
-      });
+        });
+      }
     }
   };
 
@@ -175,6 +181,24 @@ function RunescapeMap({
 
   return (
     <>
+      {selectedSong && cursorPosition && (
+        <div
+          style={{
+            position: 'fixed', // Use fixed to position relative to the viewport
+            top: cursorPosition.y + 10, // Add offset to avoid covering the cursor
+            left: cursorPosition.x + 10, // Add offset
+            zIndex: 1000,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)', // Slightly darker background
+            color: 'white',
+            padding: '6px', // Increased padding
+            borderRadius: '5px',
+            pointerEvents: 'none', // Prevent cursor interaction
+            fontSize: "20px"
+          }}
+        >
+          {selectedSong}
+        </div>
+      )}
       {showGuessMarker && (
         <Marker
           position={gameState.leaflet_ll_click!}
@@ -250,9 +274,9 @@ function RunescapeMap({
           );
         })}
 
-      {gameState.status === GameStatus.AnswerRevealed && (
+      {gameState.status === GameStatus.AnswerRevealed && correctPolygon && (
         <GeoJSON
-          data={correctPolygon!}
+          data={correctPolygon as Feature}
           style={() => ({
             color: '#0d6efd', // Outline color
             fillColor: '#0d6efd', // Fill color

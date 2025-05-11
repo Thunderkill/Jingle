@@ -155,10 +155,10 @@ export default function Practice() {
         mapRef={mapRef}
         gameState={gameState}
         onMapClick={(leaflet_ll_click: L.LatLng) => {
-          const newGameState = setClickedPosition(leaflet_ll_click); // Use destructured setClickedPosition
+          /* const newGameState = setClickedPosition(leaflet_ll_click); // Use destructured setClickedPosition
           if (!currentPreferences.preferConfirmation) {
             confirmGuess(newGameState); // confirm immediately
-          }
+          } */
         }}
         onFeatureClick={setCurrentSong} // Pass setCurrentSong here
         enabledRegions={enabledRegions} // Pass enabledRegions here
