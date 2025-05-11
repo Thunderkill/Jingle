@@ -1,7 +1,7 @@
 import L, { CRS, Icon } from 'leaflet';
 import markerIconPng from 'leaflet/dist/images/marker-icon.png';
 import 'leaflet/dist/leaflet.css';
-import { RefObject, useEffect, useMemo, useRef } from 'react';
+import { RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { Feature } from 'geojson'; // Import Feature
 import {
   GeoJSON,
@@ -55,15 +55,21 @@ export default function RunescapeMapWrapper({
   );
 }
 
-function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }: RunescapeMapProps) {
+function RunescapeMap({
+  gameState,
+  onMapClick,
+  onFeatureClick,
+  enabledRegions,
+}: RunescapeMapProps) {
   const map = useMap();
+  const [selectedSong, setSelectedSong] = useState<string | null>(null);
 
   // Create a set of allowed song names based on enabled regions
   const allowedSongNames = useMemo(() => {
     const songNames = new Set<string>();
-    enabledRegions.forEach(region => {
+    enabledRegions.forEach((region) => {
       if (REGIONS[region]) {
-        REGIONS[region].forEach(songName => {
+        REGIONS[region].forEach((songName) => {
           songNames.add(songName);
         });
       }
@@ -85,7 +91,7 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
       const { polygon } = findNearestPolygonWhereSongPlays(
         map,
         song,
-        gameState.leaflet_ll_click!,
+        gameState.leaflet_ll_click!
       );
 
       const leaflet_ll_correctPolygon = polygon.geometry.coordinates[0];
@@ -93,11 +99,11 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
         .map(([lng, lat]) => new L.LatLng(lat, lng))
         .map((ll) => leaflet_ll_to_leaflet_xy(map, ll));
       const leaflet_xy_centerOfCorrectPolygon = getCenterOfPolygon(
-        leaflet_xy_correctPolygon,
+        leaflet_xy_correctPolygon
       );
       const leaflet_ll_centerOfCorrectPolygon = leaflet_xy_to_leaflet_ll(
         map,
-        leaflet_xy_centerOfCorrectPolygon,
+        leaflet_xy_centerOfCorrectPolygon
       );
       map.panTo(leaflet_ll_centerOfCorrectPolygon);
     }
@@ -116,7 +122,7 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
     const { polygon } = findNearestPolygonWhereSongPlays(
       map,
       song,
-      leaflet_ll_click!,
+      leaflet_ll_click!
     );
     return polygon;
   }, [map, song, leaflet_ll_click]);
@@ -124,21 +130,47 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
   const handleEachFeature = (feature: Feature, layer: L.Layer) => {
     console.log(feature);
     if (feature.properties && feature.properties.title) {
-      layer.bindPopup(feature.properties!.title); // Use non-null assertion
+      layer.bindPopup(feature.properties.title);
 
       // Add click listener to the layer
       layer.on('click', () => {
         // Extract song name from feature.properties.title
-        const titleMatch = feature.properties!.title.match(/>(.*?)</); // Use non-null assertion
-        if (titleMatch && titleMatch[1]) {
-          const songName = decodeHTML(titleMatch[1]); // Use decodeHTML from map-utils
-          if (songName !== null) { // Add null check
-            console.log(songName)
-            onFeatureClick?.(songName.trim()); // Call the new prop function
+        if (feature.properties && feature.properties.title) {
+          const titleMatch = feature.properties.title.match(/>(.*?)</);
+          if (titleMatch && titleMatch[1]) {
+            const songName = decodeHTML(titleMatch[1]);
+            if (songName !== null) {
+              console.log(songName);
+              setSelectedSong(songName.trim()); // Set the selected song
+              onFeatureClick?.(songName.trim()); // Call the new prop function
+            }
           }
         }
       });
     }
+  };
+
+  const getFeatureStyle = (feature: Feature) => {
+    if (feature.properties && feature.properties.title) {
+      const titleMatch = feature.properties.title.match(/>(.*?)</);
+      if (titleMatch && titleMatch[1]) {
+        const songName = decodeHTML(titleMatch[1]).trim();
+        if (songName === selectedSong) {
+          return {
+            color: '#0d6efd', // Outline color
+            fillColor: '#ff0000', // Highlight color (red)
+            weight: 1, // Outline thickness
+            fillOpacity: 0.5, // Opacity of fill
+          };
+        }
+      }
+    }
+    return {
+      color: '#0d6efd', // Outline color
+      fillColor: '#0d6efd', // Default fill color
+      weight: 1, // Outline thickness
+      fillOpacity: 0.2, // Opacity of fill
+    };
   };
 
   return (
@@ -157,7 +189,7 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
       )}
 
       {geojsondata.features
-        .filter(feature => {
+        .filter((feature) => {
           // Extract song name from feature.properties.title
           if (feature.properties && feature.properties.title) {
             const titleMatch = feature.properties.title.match(/>(.*?)</);
@@ -171,42 +203,48 @@ function RunescapeMap({ gameState, onMapClick, onFeatureClick, enabledRegions }:
         })
         .map((feature, index) => {
           // Transform coordinates
-          const transformedFeature = {
+          const transformedFeature: Feature = {
             ...feature,
             geometry: {
               ...feature.geometry,
-              coordinates: feature.geometry.type === 'Polygon'
-                ? feature.geometry.coordinates.map(ring =>
-                  ring.map(([x, y]) => {
-                    const leaflet_xy = geojson_xy_to_leaflet_xy([x, y]);
-                    const leaflet_ll = leaflet_xy_to_leaflet_ll(map, leaflet_xy);
-                    return [leaflet_ll.lng, leaflet_ll.lat]; // Convert L.LatLng to [lng, lat]
-                  })
-                )
-              : feature.geometry.type === 'MultiPolygon'
-                ? (feature.geometry.coordinates as unknown as Array<Array<Array<[number, number]>>>).map(polygon =>
-                    polygon.map(ring =>
+              coordinates:
+                feature.geometry.type === 'Polygon'
+                  ? feature.geometry.coordinates.map((ring) =>
                       ring.map(([x, y]) => {
                         const leaflet_xy = geojson_xy_to_leaflet_xy([x, y]);
-                        const leaflet_ll = leaflet_xy_to_leaflet_ll(map, leaflet_xy);
+                        const leaflet_ll = leaflet_xy_to_leaflet_ll(
+                          map,
+                          leaflet_xy
+                        );
                         return [leaflet_ll.lng, leaflet_ll.lat]; // Convert L.LatLng to [lng, lat]
                       })
                     )
-                  )
-                : feature.geometry.coordinates, // Handle other geometry types if necessary
+                  : feature.geometry.type === 'MultiPolygon'
+                  ? (
+                      feature.geometry.coordinates as unknown as Array<
+                        Array<Array<[number, number]>>
+                      >
+                    ).map((polygon) =>
+                      polygon.map((ring) =>
+                        ring.map(([x, y]) => {
+                          const leaflet_xy = geojson_xy_to_leaflet_xy([x, y]);
+                          const leaflet_ll = leaflet_xy_to_leaflet_ll(
+                            map,
+                            leaflet_xy
+                          );
+                          return [leaflet_ll.lng, leaflet_ll.lat]; // Convert L.LatLng to [lng, lat]
+                        })
+                      )
+                    )
+                  : feature.geometry.coordinates, // Handle other geometry types if necessary
             },
-          };
+          } as Feature; // Cast to Feature type
 
           return (
             <GeoJSON
-              key={JSON.stringify(Array.from(allowedSongNames)) + index} // Add allowedSongNames to key
+              key={`${index}-${enabledRegions.join(',')}`}
               data={transformedFeature} // Use the transformed feature
-              style={() => ({
-                color: '#0d6efd', // Outline color
-                fillColor: '#0d6efd', // Fill color
-                weight: 1, // Outline thickness
-                fillOpacity: 0.2, // Opacity of fill
-              })}
+              style={() => getFeatureStyle(transformedFeature)} // Use the getFeatureStyle function
               onEachFeature={handleEachFeature} // Pass the defined handler
             />
           );
