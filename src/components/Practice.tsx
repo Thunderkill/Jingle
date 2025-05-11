@@ -161,6 +161,7 @@ export default function Practice() {
           }
         }}
         onFeatureClick={setCurrentSong} // Pass setCurrentSong here
+        enabledRegions={enabledRegions} // Pass enabledRegions here
       />
 
       <RoundResult gameState={gameState} />

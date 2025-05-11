@@ -250,9 +250,10 @@ export default function DailyJingle({ dailyChallenge }: DailyJingleProps) {
         onMapClick={(leaflet_ll_click: L.LatLng) => {
           const newGameState = jingle.setClickedPosition(leaflet_ll_click);
           if (!currentPreferences.preferConfirmation) {
-            confirmGuess(newGameState); // confirm immediately
+            confirmGuess(newGameState);
           }
         }}
+        enabledRegions={[]} // Pass an empty array for enabledRegions
       />
 
       <RoundResult gameState={gameState} />
