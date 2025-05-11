@@ -54,48 +54,22 @@ export default function Practice() {
     timeTaken: null,
     leaflet_ll_click: null,
   };
-  const jingle = useGameLogic(mapRef, initialGameState);
-  const gameState = jingle.gameState;
+  const { gameState, setClickedPosition, confirmGuess, nextSong: nextSongHook, addSong, updateGameSettings, setCurrentSong } = useGameLogic(mapRef, initialGameState);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     playSong(
       audioRef,
-      initialGameState.songs[initialGameState.round],
-      currentPreferences.preferOldAudio,
-      currentPreferences.preferHardMode,
+      gameState.songs[gameState.round], // Use current gameState
+      gameState.settings.oldAudio, // Use current gameState
+      gameState.settings.hardMode, // Use current gameState
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const confirmGuess = (latestGameState?: GameState) => {
-    const gameState = jingle.confirmGuess(latestGameState);
-
-    // update statistics
-    incrementGlobalGuessCounter();
-    const currentSong = gameState.songs[gameState.round];
-    const correct = gameState.scores[gameState.round] === 1000;
-    if (correct) {
-      incrementSongSuccessCount(currentSong);
-      incrementLocalGuessCount(true);
-      updateGuessStreak(true);
-    } else {
-      incrementSongFailureCount(currentSong);
-      incrementLocalGuessCount(false);
-      updateGuessStreak(false);
-    }
-  };
+  }, [gameState.round, gameState.songs, gameState.settings, audioRef]); // Add dependencies
 
   const nextSong = () => {
     const newSong = getRandomSong(enabledRegions);
-    const gameState = jingle.addSong(newSong);
-    jingle.nextSong(gameState);
-    playSong(
-      audioRef,
-      newSong,
-      currentPreferences.preferOldAudio,
-      currentPreferences.preferHardMode,
-    );
+    addSong(newSong); // Add the new song to the state
+    setCurrentSong(newSong); // Set the current song to the new song
   };
 
   const updatePreferences = (preferences: UserPreferences) => {
@@ -103,7 +77,7 @@ export default function Practice() {
       hardMode: preferences.preferHardMode,
       oldAudio: preferences.preferOldAudio,
     };
-    jingle.updateGameSettings(newSettings);
+    updateGameSettings(newSettings); // Use destructured updateGameSettings
 
     savePreferencesToBrowser(preferences);
   };
@@ -181,11 +155,12 @@ export default function Practice() {
         mapRef={mapRef}
         gameState={gameState}
         onMapClick={(leaflet_ll_click: L.LatLng) => {
-          const newGameState = jingle.setClickedPosition(leaflet_ll_click);
+          const newGameState = setClickedPosition(leaflet_ll_click); // Use destructured setClickedPosition
           if (!currentPreferences.preferConfirmation) {
             confirmGuess(newGameState); // confirm immediately
           }
         }}
+        onFeatureClick={setCurrentSong} // Pass setCurrentSong here
       />
 
       <RoundResult gameState={gameState} />

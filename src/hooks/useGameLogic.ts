@@ -95,6 +95,18 @@ export default function useGameLogic(
     }));
   };
 
+  const setCurrentSong = (songName: string): GameState => {
+    const newGameState = {
+      ...gameState,
+      songs: [songName],
+      round: 0,
+      status: GameStatus.Guessing,
+      leaflet_ll_click: null,
+    };
+    setGameState(newGameState);
+    return newGameState;
+  };
+
   return {
     gameState,
     setClickedPosition,
@@ -103,5 +115,6 @@ export default function useGameLogic(
     nextSong,
     endGame,
     updateGameSettings,
+    setCurrentSong, // Return the new function
   };
 }

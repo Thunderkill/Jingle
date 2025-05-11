@@ -2,6 +2,7 @@ import L, { CRS, Icon } from 'leaflet';
 import markerIconPng from 'leaflet/dist/images/marker-icon.png';
 import 'leaflet/dist/leaflet.css';
 import { RefObject, useEffect, useMemo, useRef } from 'react';
+import { Feature } from 'geojson'; // Import Feature
 import {
   GeoJSON,
   MapContainer,
@@ -16,12 +17,17 @@ import {
   getCenterOfPolygon,
   leaflet_ll_to_leaflet_xy,
   leaflet_xy_to_leaflet_ll,
+  geojson_xy_to_leaflet_xy,
 } from '../utils/map-utils';
+import { decodeHTML } from '../utils/string-utils'; // Import decodeHTML
+import geojsondata from '../data/GeoJSON';
+
 const outerBounds = new L.LatLngBounds(L.latLng(-78, 0), L.latLng(0, 136.696));
 
 interface RunescapeMapProps {
   gameState: GameState;
   onMapClick: (leaflet_ll_click: L.LatLng) => void;
+  onFeatureClick?: (songName: string) => void; // Add the new prop
 }
 
 export default function RunescapeMapWrapper({
@@ -46,7 +52,7 @@ export default function RunescapeMapWrapper({
   );
 }
 
-function RunescapeMap({ gameState, onMapClick }: RunescapeMapProps) {
+function RunescapeMap({ gameState, onMapClick, onFeatureClick }: RunescapeMapProps) {
   const map = useMap();
 
   useMapEvents({
@@ -99,6 +105,26 @@ function RunescapeMap({ gameState, onMapClick }: RunescapeMapProps) {
     return polygon;
   }, [map, song, leaflet_ll_click]);
 
+  const handleEachFeature = (feature: Feature, layer: L.Layer) => {
+    console.log(feature);
+    if (feature.properties && feature.properties.title) {
+      layer.bindPopup(feature.properties!.title); // Use non-null assertion
+
+      // Add click listener to the layer
+      layer.on('click', () => {
+        // Extract song name from feature.properties.title
+        const titleMatch = feature.properties!.title.match(/>(.*?)</); // Use non-null assertion
+        if (titleMatch && titleMatch[1]) {
+          const songName = decodeHTML(titleMatch[1]); // Use decodeHTML from map-utils
+          if (songName !== null) { // Add null check
+            console.log(songName)
+            onFeatureClick?.(songName.trim()); // Call the new prop function
+          }
+        }
+      });
+    }
+  };
+
   return (
     <>
       {showGuessMarker && (
@@ -113,6 +139,49 @@ function RunescapeMap({ gameState, onMapClick }: RunescapeMapProps) {
           }
         />
       )}
+
+      {geojsondata.features.map((feature, index) => {
+        // Transform coordinates
+        const transformedFeature = {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: feature.geometry.type === 'Polygon'
+              ? feature.geometry.coordinates.map(ring =>
+                  ring.map(([x, y]) => {
+                    const leaflet_xy = geojson_xy_to_leaflet_xy([x, y]);
+                    const leaflet_ll = leaflet_xy_to_leaflet_ll(map, leaflet_xy);
+                    return [leaflet_ll.lng, leaflet_ll.lat]; // Convert L.LatLng to [lng, lat]
+                  })
+                )
+              : feature.geometry.type === 'MultiPolygon'
+                ? (feature.geometry.coordinates as unknown as Array<Array<Array<[number, number]>>>).map(polygon =>
+                    polygon.map(ring =>
+                      ring.map(([x, y]) => {
+                        const leaflet_xy = geojson_xy_to_leaflet_xy([x, y]);
+                        const leaflet_ll = leaflet_xy_to_leaflet_ll(map, leaflet_xy);
+                        return [leaflet_ll.lng, leaflet_ll.lat]; // Convert L.LatLng to [lng, lat]
+                      })
+                    )
+                  )
+                : feature.geometry.coordinates, // Handle other geometry types if necessary
+          },
+        };
+
+        return (
+          <GeoJSON
+            key={index}
+            data={transformedFeature} // Use the transformed feature
+            style={() => ({
+              color: '#0d6efd', // Outline color
+              fillColor: '#0d6efd', // Fill color
+              weight: 1, // Outline thickness
+              fillOpacity: 0.2, // Opacity of fill
+            })}
+            onEachFeature={handleEachFeature} // Pass the defined handler
+          />
+        );
+      })}
 
       {gameState.status === GameStatus.AnswerRevealed && (
         <GeoJSON
